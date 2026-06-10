@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Type Speed Authentication System</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- Google Fonts: Orbitron (display) + Share Tech Mono (body) -->
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Chart.js for typing analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- EmailJS for notifications -->
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════
+     BACKGROUND CANVAS — animated matrix rain
+═══════════════════════════════════════════════════ -->
+<canvas id="matrixCanvas"></canvas>
+
+<!-- ═══════════════════════════════════════════════════
+     GLOBAL HEADER
+═══════════════════════════════════════════════════ -->
+<header class="site-header">
+  <div class="logo">
+    <span class="logo-icon">⬡</span>
+    <span class="logo-text">Type Speed <span class="accent">Authentication</span></span>
+    <span class="logo-badge">BIOMETRIC v1.0</span>
+  </div>
+  <div class="header-controls">
+    <button id="themeToggle" class="btn-icon" title="Toggle theme" aria-label="Toggle theme">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1" x2="12" y2="3"/>
+        <line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/>
+        <line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </svg>
+    </button>
+    <div class="sys-time" id="sysTime"></div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════
+     TOAST NOTIFICATION
+═══════════════════════════════════════════════════ -->
+<div id="toastContainer" class="toast-container"></div>
+
+<!-- ═══════════════════════════════════════════════════
+     HACKER WARNING OVERLAY
+═══════════════════════════════════════════════════ -->
+<div id="hackerOverlay" class="hacker-overlay hidden">
+  <div class="hacker-box">
+    <div class="hacker-icon">⚠</div>
+    <div class="hacker-title">INTRUSION DETECTED</div>
+    <div class="hacker-subtitle">Anomalous keystroke pattern identified</div>
+    <div class="hacker-scan"></div>
+    <div class="hacker-lines" id="hackerLines"></div>
+    <button class="btn-primary" onclick="closeHackerOverlay()">ACKNOWLEDGE THREAT</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     MAIN APP CONTAINER
+═══════════════════════════════════════════════════ -->
+<main class="app-container">
+
+  <!-- ── PAGE: LOGIN ── -->
+  <section id="page-login" class="page active">
+    <div class="card glass">
+      <div class="card-header">
+        <div class="status-indicator online"></div>
+        <span class="card-label">SECURE AUTH TERMINAL</span>
+      </div>
+      <h1 class="card-title">System Login</h1>
+      <p class="card-desc">Keystroke dynamics are being monitored</p>
+
+      <div class="form-group">
+        <label class="field-label" for="loginUsername">
+          <span class="label-icon">◈</span> USERNAME
+        </label>
+        <input
+          id="loginUsername"
+          type="text"
+          class="field"
+          autocomplete="off"
+          placeholder="Enter username"
+        />
+      </div>
+
+      <div class="form-group">
+        <label class="field-label" for="loginPassword">
+          <span class="label-icon">◈</span> PASSWORD
+        </label>
+        <div class="field-wrap">
+          <input
+            id="loginPassword"
+            type="password"
+            class="field"
+            autocomplete="off"
+            placeholder="Enter password"
+          />
+          <button class="toggle-pass" id="toggleLoginPass" aria-label="Show password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="eyeIconLogin">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+        <!-- Real-time typing metrics bar -->
+        <div class="metrics-bar">
+          <span class="metric-item">
+            <span class="metric-label">WPM</span>
+            <span class="metric-val" id="loginWpm">—</span>
+          </span>
+          <span class="metric-item">
+            <span class="metric-label">RHYTHM</span>
+            <div class="rhythm-dots" id="loginRhythm"></div>
+          </span>
+          <span class="metric-item">
+            <span class="metric-label">CONFIDENCE</span>
+            <span class="metric-val" id="loginConf">—</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Failed attempts display -->
+      <div id="loginAttemptsBar" class="attempts-bar hidden">
+        <span class="attempts-label">Failed attempts:</span>
+        <span class="attempts-dots" id="attemptsDots"></span>
+        <span id="lockoutTimer" class="lockout-timer"></span>
+      </div>
+
+      <button class="btn-primary full" id="btnLogin">
+        <span class="btn-text">AUTHENTICATE</span>
+        <span class="btn-loader hidden"></span>
+      </button>
+
+      <div class="form-footer">
+        <span>No account?</span>
+        <button class="link-btn" onclick="showPage('register')">Register identity →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── PAGE: REGISTER ── -->
+  <section id="page-register" class="page">
+    <div class="card glass wide">
+      <div class="card-header">
+        <div class="status-indicator scanning"></div>
+        <span class="card-label">IDENTITY ENROLLMENT</span>
+      </div>
+      <h1 class="card-title">Register Profile</h1>
+      <p class="card-desc">Your typing biometrics will be captured and stored</p>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="field-label" for="regUsername">
+            <span class="label-icon">◈</span> USERNAME
+          </label>
+          <input id="regUsername" type="text" class="field" placeholder="Choose a username" autocomplete="off" />
+        </div>
+
+        <div class="form-group">
+          <label class="field-label" for="regEmail">
+            <span class="label-icon">◈</span> EMAIL
+          </label>
+          <input id="regEmail" type="email" class="field" placeholder="your@email.com" autocomplete="off" />
+        </div>
+
+        <div class="form-group">
+          <label class="field-label" for="regPassword">
+            <span class="label-icon">◈</span> PASSWORD
+          </label>
+          <div class="field-wrap">
+            <input id="regPassword" type="password" class="field" placeholder="Create strong password" autocomplete="new-password" />
+            <button class="toggle-pass" id="toggleRegPass" aria-label="Show password">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+          <!-- Password strength meter -->
+          <div class="strength-wrap">
+            <div class="strength-bar">
+              <div class="strength-fill" id="strengthFill"></div>
+            </div>
+            <span class="strength-label" id="strengthLabel">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Biometric capture section -->
+      <div class="biometric-panel">
+        <div class="biometric-header">
+          <span class="biometric-icon">⬡</span>
+          <span>BIOMETRIC CAPTURE — Type password 3 times to enroll</span>
+          <span class="biometric-progress" id="bioProgress">0/3</span>
+        </div>
+        <div class="bio-samples" id="bioSamples">
+          <div class="bio-sample" id="sample1">
+            <span class="sample-num">01</span>
+            <div class="sample-bar"><div class="sample-fill"></div></div>
+            <span class="sample-status">PENDING</span>
+          </div>
+          <div class="bio-sample" id="sample2">
+            <span class="sample-num">02</span>
+            <div class="sample-bar"><div class="sample-fill"></div></div>
+            <span class="sample-status">PENDING</span>
+          </div>
+          <div class="bio-sample" id="sample3">
+            <span class="sample-num">03</span>
+            <div class="sample-bar"><div class="sample-fill"></div></div>
+            <span class="sample-status">PENDING</span>
+          </div>
+        </div>
+        <div class="form-group" style="margin-top:1rem">
+          <label class="field-label" for="regPasswordConfirm">
+            <span class="label-icon">◈</span> RE-TYPE PASSWORD (Sample <span id="sampleCount">1</span>/3)
+          </label>
+          <input id="regPasswordConfirm" type="password" class="field" placeholder="Re-enter for biometric sampling" autocomplete="new-password" />
+        </div>
+      </div>
+
+      <button class="btn-primary full" id="btnRegister">
+        <span class="btn-text">ENROLL IDENTITY</span>
+        <span class="btn-loader hidden"></span>
+      </button>
+
+      <div class="form-footer">
+        <span>Already enrolled?</span>
+        <button class="link-btn" onclick="showPage('login')">← Return to login</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── PAGE: DASHBOARD ── -->
+  <section id="page-dashboard" class="page">
+    <div class="dashboard-grid">
+
+      <!-- Profile card -->
+      <div class="card glass dash-profile">
+        <div class="profile-avatar" id="dashAvatar">U</div>
+        <div class="profile-info">
+          <div class="profile-name" id="dashName">—</div>
+          <div class="profile-email" id="dashEmail">—</div>
+        </div>
+        <div class="profile-status">
+          <div class="status-indicator online"></div>
+          <span>AUTHENTICATED</span>
+        </div>
+        <button class="btn-outline full" onclick="logout()">LOGOUT ⏏</button>
+      </div>
+
+      <!-- Biometric score card -->
+      <div class="card glass dash-score">
+        <div class="card-header">
+          <span class="label-icon">◈</span>
+          <span class="card-label">BIOMETRIC MATCH SCORE</span>
+        </div>
+        <div class="score-ring-wrap">
+          <svg class="score-ring" viewBox="0 0 120 120">
+            <circle class="ring-bg" cx="60" cy="60" r="50"/>
+            <circle class="ring-fill" id="scoreRingFill" cx="60" cy="60" r="50"
+              stroke-dasharray="314"
+              stroke-dashoffset="314"
+              transform="rotate(-90 60 60)"/>
+          </svg>
+          <div class="score-number" id="scoreNumber">—%</div>
+        </div>
+        <div class="score-breakdown" id="scoreBreakdown"></div>
+      </div>
+
+      <!-- Chart card -->
+      <div class="card glass dash-chart">
+        <div class="card-header">
+          <span class="label-icon">◈</span>
+          <span class="card-label">KEYSTROKE INTERVAL ANALYSIS</span>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="keystrokeChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Security alerts -->
+      <div class="card glass dash-alerts">
+        <div class="card-header">
+          <span class="label-icon">◈</span>
+          <span class="card-label">SECURITY ALERT LOG</span>
+          <span class="badge-count" id="alertCount">0</span>
+        </div>
+        <div class="alerts-list" id="alertsList">
+          <div class="empty-state">No alerts recorded</div>
+        </div>
+        <button class="btn-outline" onclick="clearAlerts()">CLEAR LOG</button>
+      </div>
+
+      <!-- Typing stats card -->
+      <div class="card glass dash-stats">
+        <div class="card-header">
+          <span class="label-icon">◈</span>
+          <span class="card-label">SESSION STATISTICS</span>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-val" id="statWpm">—</div>
+            <div class="stat-lbl">AVG WPM</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-val" id="statAccuracy">—</div>
+            <div class="stat-lbl">ACCURACY</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-val" id="statDwell">—</div>
+            <div class="stat-lbl">DWELL (ms)</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-val" id="statFlight">—</div>
+            <div class="stat-lbl">FLIGHT (ms)</div>
+          </div>
+        </div>
+        <div class="card-header" style="margin-top:1.5rem">
+          <span class="card-label">REGISTERED BIOMETRIC PROFILE</span>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-val" id="regWpm">—</div>
+            <div class="stat-lbl">REG. WPM</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-val" id="regDwell">—</div>
+            <div class="stat-lbl">REG. DWELL</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-val" id="regFlight">—</div>
+            <div class="stat-lbl">REG. FLIGHT</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-val" id="regSamples">—</div>
+            <div class="stat-lbl">SAMPLES</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notification settings -->
+      <div class="card glass dash-notify">
+        <div class="card-header">
+          <span class="label-icon">◈</span>
+          <span class="card-label">NOTIFICATION CONFIG</span>
+        </div>
+        <div class="notify-form">
+          <div class="form-group">
+            <label class="field-label">EMAILJS SERVICE ID</label>
+            <input id="cfgServiceId" type="text" class="field sm" placeholder="service_xxxxxxx" />
+          </div>
+          <div class="form-group">
+            <label class="field-label">EMAILJS TEMPLATE ID</label>
+            <input id="cfgTemplateId" type="text" class="field sm" placeholder="template_xxxxxxx" />
+          </div>
+          <div class="form-group">
+            <label class="field-label">EMAILJS PUBLIC KEY</label>
+            <input id="cfgPublicKey" type="text" class="field sm" placeholder="your_public_key" />
+          </div>
+          <button class="btn-outline" onclick="saveEmailConfig()">SAVE CONFIG</button>
+          <button class="btn-outline" style="margin-top:.5rem" onclick="testEmailAlert()">SEND TEST ALERT</button>
+        </div>
+       <div class="notify-info">
+  <div class="config-title">NOTIFICATION SETUP GUIDE</div>
+
+  <ul class="config-steps">
+    <li>Register an EmailJS account.</li>
+    <li>Connect your email service provider.</li>
+    <li>Create a security alert template.</li>
+    <li>Enter the Service ID, Template ID, and Public Key above.</li>
+    <li>Save the configuration.</li>
+    <li>Run a test alert to verify delivery.</li>
+  </ul>
+
+  <div class="config-status">
+    Once configured, KeyGuard will automatically notify the registered
+    user whenever a suspicious login attempt or biometric mismatch is detected.
+  </div>
+</div>
+      </div>
+
+    </div><!-- /dashboard-grid -->
+  </section>
+
+</main>
+
+<!-- ═══════════════════════════════════════════════════
+     AUDIO ELEMENTS (silent by default)
+═══════════════════════════════════════════════════ -->
+<audio id="sndAlert" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAA..." preload="none"></audio>
+
+<script src="script.js"></script>
+</body>
+</html>
