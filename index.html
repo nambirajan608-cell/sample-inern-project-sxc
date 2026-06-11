@@ -143,7 +143,53 @@
 
       <div class="form-footer">
         <span>No account?</span>
-        <button class="link-btn" onclick="showPage('register')">Register identity →</button>
+        <div class="footer-actions">
+          <button class="link-btn" onclick="showPage('register')">Register identity →</button>
+          <button class="link-btn" onclick="showPage('admin-login')">Admin login →</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="page-admin-login" class="page">
+    <div class="card glass">
+      <div class="card-header">
+        <div class="status-indicator online"></div>
+        <span class="card-label">ADMIN ACCESS</span>
+      </div>
+      <h1 class="card-title">Admin Login</h1>
+      <p class="card-desc">Enter admin email and password to view user details.</p>
+
+      <div class="form-group">
+        <label class="field-label" for="adminEmail">
+          <span class="label-icon">◈</span> ADMIN EMAIL
+        </label>
+        <input id="adminEmail" type="email" class="field" autocomplete="off" placeholder="admin@example.com" />
+      </div>
+
+      <div class="form-group">
+        <label class="field-label" for="adminPassword">
+          <span class="label-icon">◈</span> ADMIN PASSWORD
+        </label>
+        <div class="field-wrap">
+          <input id="adminPassword" type="password" class="field" autocomplete="off" placeholder="Enter admin password" />
+          <button class="toggle-pass" id="toggleAdminPass" aria-label="Show password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <button class="btn-primary full" id="btnAdminLogin">
+        <span class="btn-text">ADMIN AUTH</span>
+        <span class="btn-loader hidden"></span>
+      </button>
+
+      <div class="form-footer">
+        <span>Back to user login</span>
+        <button class="link-btn" onclick="showPage('login')">← Return</button>
       </div>
     </div>
   </section>
@@ -226,6 +272,10 @@
           </label>
           <input id="regPasswordConfirm" type="password" class="field" placeholder="Re-enter for biometric sampling" autocomplete="new-password" />
         </div>
+      </div>
+
+      <div class="form-disclaimer" style="margin:0.6rem 0 0.8rem; font-size:0.9rem; color:var(--c-text2);">
+        If a login fails (wrong password) or your typing-speed doesn't match the stored profile, a security email will be sent — please check your inbox and your spam/junk folder.
       </div>
 
       <button class="btn-primary full" id="btnRegister">
@@ -377,6 +427,7 @@
     <li>Register an EmailJS account.</li>
     <li>Connect your email service provider.</li>
     <li>Create a security alert template.</li>
+    3
     <li>Enter the Service ID, Template ID, and Public Key above.</li>
     <li>Save the configuration.</li>
     <li>Run a test alert to verify delivery.</li>
@@ -390,6 +441,44 @@
       </div>
 
     </div><!-- /dashboard-grid -->
+  </section>
+
+  <section id="page-admin-panel" class="page">
+    <div class="card glass wide admin-card">
+      <div class="card-header">
+        <div class="status-indicator online"></div>
+        <span class="card-label">ADMIN DASHBOARD</span>
+      </div>
+      <h1 class="card-title">User Records</h1>
+      <p class="card-desc">All registered users, password attempts, and stored profile details.</p>
+
+      <div class="admin-toolbar">
+        <button class="btn-outline" onclick="loadAdminUsers()">REFRESH USERS</button>
+        <button class="btn-outline" onclick="migrateLocalUsersToDb()">MIGRATE LOCAL DATA</button>
+        <button class="btn-outline" onclick="logoutAdmin()">LOGOUT</button>
+      </div>
+
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Email</th>
+              <th>Created</th>
+              <th>Failed Attempts</th>
+              <th>Last Password Attempt</th>
+              <th>Last Attempt</th>
+              <th>Profile WPM</th>
+              <th>Samples</th>
+              <th>Last Login Score</th>
+            </tr>
+          </thead>
+          <tbody id="adminUserRows">
+            <tr><td colspan="6" class="empty-state">No registered users yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </section>
 
 </main>

@@ -663,6 +663,61 @@ body {
   gap: 0.5rem;
 }
 
+.footer-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.admin-toolbar {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.2rem;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: rgba(0,0,0,0.18);
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 860px;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 0.9rem 0.8rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  font-family: var(--font-mono);
+  color: var(--c-text);
+}
+
+.admin-table th {
+  color: var(--c-text2);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.admin-table tr:nth-child(even) {
+  background: rgba(0,230,180,0.02);
+}
+
+.admin-table td {
+  font-size: 0.85rem;
+}
+
+#page-admin-panel.active {
+  max-width: 1200px;
+}
+
 .hidden { display: none !important; }
 
 /* ── DASHBOARD GRID ── */

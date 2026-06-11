@@ -47,6 +47,8 @@ const CONFIG = {
   }
 };
 
+const API_BASE = 'http://localhost:5000/api';
+
 /* ══════════════════════════════════════
    STATE
 ══════════════════════════════════════ */
@@ -54,6 +56,7 @@ const CONFIG = {
 const state = {
   currentPage:     'login',
   currentUser:     null,
+  currentUserData: null,
   loginAttempts:   0,
   lockoutUntil:    0,
   keystrokeChart:  null,
@@ -101,6 +104,7 @@ function showPage(name) {
   $(`#page-${name}`).classList.add('active');
   state.currentPage = name;
   if (name === 'dashboard') loadDashboard();
+  if (name === 'admin-panel') loadAdminUsers();
 }
 
 /** Show/hide loading state on a button */
@@ -397,25 +401,15 @@ function std(arr) {
    LOCAL STORAGE HELPERS
 ══════════════════════════════════════ */
 
-function saveUser(user) {
-  localStorage.setItem(`kg_user_${user.username}`, JSON.stringify(user));
+async function saveAlert(entry) {
+  if (!state.currentUser) return;
+  await apiRequest(`/users/${encodeURIComponent(state.currentUser)}/alerts`, 'POST', entry);
 }
 
-function loadUser(username) {
-  const raw = localStorage.getItem(`kg_user_${username}`);
-  return raw ? JSON.parse(raw) : null;
-}
-
-function saveAlerts(alerts) {
-  if (state.currentUser) {
-    localStorage.setItem(`kg_alerts_${state.currentUser}`, JSON.stringify(alerts));
-  }
-}
-
-function loadAlerts() {
+async function loadAlerts() {
   if (!state.currentUser) return [];
-  const raw = localStorage.getItem(`kg_alerts_${state.currentUser}`);
-  return raw ? JSON.parse(raw) : [];
+  const result = await apiRequest(`/users/${encodeURIComponent(state.currentUser)}/alerts`, 'GET');
+  return result.success ? result.alerts : [];
 }
 
 /* ══════════════════════════════════════
@@ -426,11 +420,16 @@ let alertLog = [];
 
 function logAlert(type, icon, message) {
   const entry = {
-    type, icon, message,
-    time: new Date().toLocaleTimeString()
+    type,
+    icon,
+    message,
+    time: new Date().toLocaleTimeString(),
+    createdAt: Date.now(),
   };
   alertLog.unshift(entry);
-  saveAlerts(alertLog);
+  saveAlert(entry).catch(() => {
+    // If backend persistence fails, keep local UI alerts visible.
+  });
   renderAlerts();
 }
 
@@ -457,9 +456,8 @@ function renderAlerts() {
 
 function clearAlerts() {
   alertLog = [];
-  saveAlerts([]);
   renderAlerts();
-  toast('Log Cleared', 'Security alert log has been purged', 'info');
+  toast('Log cleared', 'Security alert log has been purged', 'info');
 }
 
 /* ══════════════════════════════════════
@@ -640,15 +638,9 @@ async function handleRegister() {
     return;
   }
 
-  if (loadUser(username)) {
-    toast('Username taken', 'Choose a different username', 'error');
-    return;
-  }
-
   setLoading('#btnRegister', true);
   await delay(800); // simulated processing
 
-  // Average the 3 biometric samples into a single reference profile
   const regProfile = {
     wpm:       avg(state.reg.samples.map(s => s.wpm)),
     avgDwell:  avg(state.reg.samples.map(s => s.avgDwell)),
@@ -658,18 +650,24 @@ async function handleRegister() {
     sampleCount: state.reg.samples.length,
   };
 
-  const user = {
+  const payload = {
     username,
     email,
-    // NOTE: In production, NEVER store plaintext passwords.
-    // Use bcrypt/argon2 on a secure server.
-    passwordHash: simpleHash(password),
+    password,
     biometric: regProfile,
     createdAt: Date.now(),
   };
 
-  saveUser(user);
+  const result = await apiRequest('/users/register', 'POST', payload);
   setLoading('#btnRegister', false);
+
+  if (!result.success) {
+    toast('Registration failed', result.error, 'error');
+    return;
+  }
+
+  state.currentUser = username;
+  state.currentUserData = result.user;
 
   toast('Identity enrolled!', `Welcome, ${username}. Your biometric profile is saved.`, 'success', 5000);
   playSuccessSound();
@@ -735,10 +733,10 @@ async function handleLogin() {
     return;
   }
 
-  const username = document.getElementById('loginUsername').value.trim();
+  const emailOrUsername = document.getElementById('loginUsername').value.trim();
   const password = document.getElementById('loginPassword').value;
 
-  if (!username || !password) {
+  if (!emailOrUsername || !password) {
     toast('Missing fields', 'Enter username and password', 'warning');
     return;
   }
@@ -746,57 +744,54 @@ async function handleLogin() {
   setLoading('#btnLogin', true);
   await delay(600);
 
-  const user = loadUser(username);
-
-  // ── Check 1: Does user exist? ──
-  if (!user) {
-    setLoading('#btnLogin', false);
-    recordFailedAttempt();
-    toast('Access denied', 'Unknown username', 'error');
-    return;
-  }
-
-  // ── Check 2: Password correct? ──
-  if (simpleHash(password) !== user.passwordHash) {
-    setLoading('#btnLogin', false);
-    recordFailedAttempt();
-    toast('Access denied', 'Incorrect password', 'error');
-    return;
-  }
-
-  // ── Check 3: Biometric verification ──
-  const liveProfile = extractProfile(state.login, password.length);
-  const scores      = compareProfiles(liveProfile, user.biometric);
+  const auth = await apiRequest('/users/login', 'POST', {
+    emailOrUsername,
+    password,
+  });
 
   setLoading('#btnLogin', false);
+  if (!auth.success) {
+    recordFailedAttempt();
+    toast('Access denied', auth.error, 'error');
+    return;
+  }
 
-  // Store last login stats on the user object for dashboard display
-  user.lastLoginProfile  = liveProfile;
-  user.lastBiometricScore = scores;
-  saveUser(user);
+  const user = auth.user;
+  const liveProfile = extractProfile(state.login, password.length);
+  const scores = compareProfiles(liveProfile, user.biometric);
+
+  await apiRequest(`/users/${encodeURIComponent(user.username)}/metadata`, 'PUT', {
+    lastPasswordAttempt: emailOrUsername,
+    lastAttemptAt: Date.now(),
+    lastLoginProfile: liveProfile,
+    lastBiometricScore: scores,
+    failedAttempts: scores.overall < CONFIG.biometricThreshold ? (user.failedAttempts || 0) + 1 : 0,
+  });
 
   if (scores.overall < CONFIG.biometricThreshold) {
     // SUSPICIOUS LOGIN
     state.loginAttempts++;
-    state.currentUser = username; // set for alert logging
-    alertLog = loadAlerts();
+    state.currentUser = user.username;
+    state.currentUserData = user;
+    alertLog = await loadAlerts();
     logAlert('danger', '⚠', `Biometric mismatch: score ${scores.overall}% (threshold ${CONFIG.biometricThreshold}%)`);
 
     showHackerOverlay();
     toast('SUSPICIOUS LOGIN DETECTED', `Biometric score: ${scores.overall}%`, 'error', 8000);
-    await sendEmailAlert(user, scores, liveProfile);
+    await sendUnauthorizedLoginNotification(user, scores, liveProfile);
     resetLoginSession();
     return;
   }
 
   // ── SUCCESS ──
-  state.loginAttempts  = 0;
-  state.currentUser    = username;
-  alertLog             = loadAlerts();
+  state.loginAttempts = 0;
+  state.currentUser = user.username;
+  state.currentUserData = user;
+  alertLog = await loadAlerts();
   logAlert('info', '◈', `Successful login — biometric score: ${scores.overall}%`);
 
   playSuccessSound();
-  toast('Authentication successful', `Welcome back, ${username} — score: ${scores.overall}%`, 'success', 4000);
+  toast('Authentication successful', `Welcome back, ${user.username} — score: ${scores.overall}%`, 'success', 4000);
   resetLoginSession();
   showPage('dashboard');
 }
@@ -868,12 +863,165 @@ function initPasswordToggles() {
   });
 }
 
+function initAdmin() {
+  document.getElementById('btnAdminLogin').addEventListener('click', handleAdminLogin);
+  document.getElementById('toggleAdminPass')?.addEventListener('click', () => {
+    const pw = document.getElementById('adminPassword');
+    pw.type = pw.type === 'password' ? 'text' : 'password';
+  });
+}
+
+function sanitize(value) {
+  return String(value || '—')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+async function apiRequest(path, method = 'GET', body = null) {
+  try {
+    const options = {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+    };
+    if (body) options.body = JSON.stringify(body);
+
+    const response = await fetch(`${API_BASE}${path}`, options);
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      return { success: false, error: data?.message || response.statusText || 'API request failed' };
+    }
+    return data;
+  } catch (err) {
+    console.error('[API]', err);
+    return { success: false, error: err.message || 'Network error' };
+  }
+}
+
+function getAllUsers() {
+  return Object.keys(localStorage)
+    .filter(key => key.startsWith('kg_user_'))
+    .map(key => {
+      try { return JSON.parse(localStorage.getItem(key)); }
+      catch (err) { return null; }
+    })
+    .filter(Boolean);
+}
+
+function collectLocalUsers() {
+  return getAllUsers().map(user => ({
+    username: user.username,
+    email: user.email,
+    passwordHash: user.passwordHash,
+    biometric: user.biometric,
+    createdAt: user.createdAt,
+    failedAttempts: user.failedAttempts || 0,
+    lastPasswordAttempt: user.lastPasswordAttempt || null,
+    lastAttemptAt: user.lastAttemptAt || null,
+    lastLoginProfile: user.lastLoginProfile || null,
+    lastBiometricScore: user.lastBiometricScore || null,
+  }));
+}
+
+async function migrateLocalUsersToDb() {
+  const users = collectLocalUsers();
+  if (users.length === 0) {
+    toast('No users found', 'No localStorage user records available to migrate', 'info');
+    return;
+  }
+
+  const result = await apiRequest('/admin/migrate', 'POST', { users });
+  if (!result.success) {
+    toast('Migration failed', result.error, 'error');
+    return;
+  }
+
+  toast('Migration complete', `${result.count} user records saved to MongoDB`, 'success');
+  loadAdminUsers();
+}
+
+async function loadAdminUsers() {
+  const tbody = document.getElementById('adminUserRows');
+  if (!tbody) return;
+
+  const result = await apiRequest('/admin/users', 'GET');
+  if (!result.success) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Backend unavailable</td></tr>';
+    return;
+  }
+
+  const users = result.users || [];
+  if (users.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No registered users found</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = users.map(user => {
+    const created = user.createdAt ? new Date(user.createdAt).toLocaleString() : '—';
+    const score = user.lastBiometricScore ? `${user.lastBiometricScore.overall}%` : '—';
+    const attempt = user.lastPasswordAttempt ? sanitize(user.lastPasswordAttempt) : '—';
+    const lastAttempt = user.lastAttemptAt ? new Date(user.lastAttemptAt).toLocaleString() : '—';
+    const wpm = user.biometric?.wpm ? Math.round(user.biometric.wpm) : '—';
+    const samples = user.biometric?.sampleCount || '—';
+    const failed = user.failedAttempts || 0;
+    return `
+      <tr>
+        <td>${sanitize(user.username)}</td>
+        <td>${sanitize(user.email)}</td>
+        <td>${sanitize(created)}</td>
+        <td>${sanitize(failed)}</td>
+        <td>${attempt}</td>
+        <td>${sanitize(lastAttempt)}</td>
+        <td>${sanitize(wpm)}</td>
+        <td>${sanitize(samples)}</td>
+        <td>${sanitize(score)}</td>
+      </tr>`;
+  }).join('');
+}
+
+async function handleAdminLogin() {
+  const email = document.getElementById('adminEmail').value.trim();
+  const password = document.getElementById('adminPassword').value;
+
+  if (!email || !password) {
+    toast('Missing fields', 'Admin email and password are required', 'warning');
+    return;
+  }
+
+  const result = await apiRequest('/admin/login', 'POST', {
+    email,
+    password,
+  });
+
+  if (!result.success) {
+    toast('Access denied', result.error, 'error');
+    return;
+  }
+
+  toast('Admin access granted', 'Loading user records', 'success');
+  showPage('admin-panel');
+  loadAdminUsers();
+}
+
+function logoutAdmin() {
+  showPage('login');
+}
+
 /* ══════════════════════════════════════
    DASHBOARD
 ══════════════════════════════════════ */
 
-function loadDashboard() {
-  const user = loadUser(state.currentUser);
+async function loadDashboard() {
+  let user = state.currentUserData;
+  if (!user && state.currentUser) {
+    const result = await apiRequest(`/users/profile/${encodeURIComponent(state.currentUser)}`, 'GET');
+    if (!result.success) {
+      toast('Dashboard load failed', result.error, 'error');
+      return;
+    }
+    user = result.user;
+    state.currentUserData = user;
+  }
   if (!user) return;
 
   // Profile info
@@ -965,8 +1113,7 @@ function renderKeystrokeChart(liveProfile) {
     state.keystrokeChart.destroy();
   }
 
-  const user = loadUser(state.currentUser);
-  const reg  = user?.biometric;
+  const reg  = state.currentUserData?.biometric;
 
   const labels   = ['WPM', 'Avg Dwell (÷10)', 'Avg Flight (÷10)'];
   const liveData = [
@@ -1038,6 +1185,7 @@ function renderKeystrokeChart(liveProfile) {
 
 function logout() {
   state.currentUser = null;
+  state.currentUserData = null;
   state.loginAttempts = 0;
   if (state.keystrokeChart) {
     state.keystrokeChart.destroy();
@@ -1100,10 +1248,31 @@ function saveEmailConfig() {
   toast('Config saved', 'EmailJS credentials stored', 'success');
 }
 
-function testEmailAlert() {
+async function sendUnauthorizedLoginNotification(user, scores, liveProfile) {
+  const result = await apiRequest('/users/suspicious', 'POST', {
+    identifier: user.username,
+    reason: 'Suspicious biometric mismatch',
+    score: scores.overall,
+    profile: {
+      wpm: liveProfile.wpm,
+      avgDwell: Math.round(liveProfile.avgDwell),
+      avgFlight: Math.round(liveProfile.avgFlight),
+    },
+  });
+
+  if (!result.success) {
+    toast('Email alert failed', 'Could not send unauthorized login alert', 'warning');
+  }
+}
+
+async function testEmailAlert() {
   if (!state.currentUser) return;
-  const user = loadUser(state.currentUser);
-  if (!user) return;
+  let user = state.currentUserData;
+  if (!user) {
+    const result = await apiRequest(`/users/profile/${encodeURIComponent(state.currentUser)}`, 'GET');
+    if (!result.success) return;
+    user = result.user;
+  }
 
   sendEmailAlert(
     user,
@@ -1179,6 +1348,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initLogin();
   initRegistration();
   initPasswordToggles();
+  initAdmin();
 
   // Boot toast
   setTimeout(() => {
