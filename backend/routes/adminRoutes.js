@@ -8,8 +8,8 @@ router.post('/login', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Admin email and password are required' });
   }
 
-  const adminEmail = process.env.ADMIN_EMAIL || 'nambirajan608@gmail.com';
-  const adminPassword = process.env.ADMIN_PASSWORD || 'nambi007';
+  const adminEmail = process.env.ADMIN_EMAIL || 'rajanauthorization@gmail.com';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'access007';
 
   if (email.toLowerCase() !== adminEmail.toLowerCase() || password !== adminPassword) {
     return res.status(401).json({ success: false, message: 'Invalid admin credentials' });

@@ -78,55 +78,119 @@ ${details ? `<p><strong>Details:</strong> ${details}</p>` : ''}
 }
 
 router.post('/register', async (req, res) => {
-  const { username, email, password, biometric, createdAt } = req.body;
+  let { username, email, password, biometric, createdAt } = req.body;
+
   if (!username || !email || !password) {
-    return res.status(400).json({ success: false, message: 'Missing username, email, or password' });
+    return res.status(400).json({
+      success: false,
+      message: 'Missing username, email, or password'
+    });
   }
 
-  const existing = await User.findOne({ $or: [{ username }, { email }] });
+  // Normalize email
+  email = email.toLowerCase().trim();
+
+  // Add @gmail.com if missing
+  if (!email.endsWith('@gmail.com')) {
+    email += '@gmail.com';
+  }
+
+  const existing = await User.findOne({
+    $or: [{ username }, { email }]
+  });
+
   if (existing) {
-    return res.status(409).json({ success: false, message: 'Username or email already exists' });
+    return res.status(409).json({
+      success: false,
+      message: 'Username or email already exists'
+    });
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
-  const user = new User({ username, email, passwordHash, biometric, createdAt });
+
+  const user = new User({
+    username,
+    email,
+    passwordHash,
+    biometric,
+    createdAt
+  });
+
   await user.save();
 
   const safeUser = user.toObject();
   delete safeUser.passwordHash;
-  res.json({ success: true, user: safeUser });
+
+  res.json({
+    success: true,
+    user: safeUser
+  });
 });
 
 router.post('/login', async (req, res) => {
-  const { emailOrUsername, password } = req.body;
+  let { emailOrUsername, password } = req.body;
+
   if (!emailOrUsername || !password) {
-    return res.status(400).json({ success: false, message: 'Email or username and password are required' });
+    return res.status(400).json({
+      success: false,
+      message: 'Email or username and password are required'
+    });
+  }
+
+  // Remove spaces and convert to lowercase
+  emailOrUsername = emailOrUsername.trim().toLowerCase();
+
+  // If user entered only name, add @gmail.com
+  let emailToSearch = emailOrUsername;
+  if (!emailOrUsername.includes('@')) {
+    emailToSearch = emailOrUsername + '@gmail.com';
   }
 
   const user = await User.findOne({
     $or: [
-      { username: emailOrUsername },
-      { email: emailOrUsername.toLowerCase() },
+      { username: emailOrUsername }, // login by username
+      { email: emailToSearch }       // login by email
     ]
   });
 
   if (!user) {
-    return res.status(404).json({ success: false, message: 'Unknown user' });
+    return res.status(404).json({
+      success: false,
+      message: 'Unknown user'
+    });
   }
 
-  const passwordMatches = await bcrypt.compare(password, user.passwordHash);
+  const passwordMatches = await bcrypt.compare(
+    password,
+    user.passwordHash
+  );
+
   if (!passwordMatches) {
     user.failedAttempts = (user.failedAttempts || 0) + 1;
     user.lastPasswordAttempt = emailOrUsername;
     user.lastAttemptAt = Date.now();
+
     await user.save();
-    await sendUnauthorizedLoginEmail(user, 'Incorrect password entered', `Identifier used: ${emailOrUsername}`);
-    return res.status(401).json({ success: false, message: 'Incorrect password' });
+
+    await sendUnauthorizedLoginEmail(
+      user,
+      'Incorrect password entered',
+      `Identifier used: ${emailOrUsername}`
+    );
+
+    return res.status(401).json({
+      success: false,
+      message: 'Incorrect password'
+    });
   }
 
   const safeUser = user.toObject();
   delete safeUser.passwordHash;
-  res.json({ success: true, user: safeUser });
+
+  res.json({
+    success: true,
+    user: safeUser
+  });
 });
 
 router.get('/profile/:identifier', async (req, res) => {
